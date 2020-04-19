@@ -21,14 +21,12 @@ def get_configured_clients(session: requests.Session, baseurl: str, site: str):
   return r.json()['data']
 # End def
 
-
 def get_active_clients(session: requests.Session, baseurl: str, site: str):
   # Get active clients
   r = session.get(f'{baseurl}/proxy/network/api/s/{site}/stat/sta', verify=False)
   r.raise_for_status()
   return r.json()['data']
 # End def
-
 
 def get_clients(baseurl: str, username: str, password: str, site: str, fixed_only: bool):
   s = requests.Session()
@@ -54,37 +52,36 @@ def get_clients(baseurl: str, username: str, password: str, site: str, fixed_onl
 # End def
 
 def sftp_hosts(hosts, ssh_username, ssh_password, ssh_address):
+  filepath = "/etc/hosts"
+  oldlocalpath = "old_hosts"
+  newlocalpath = "new_hosts"
+  
   ssh_client = paramiko.SSHClient()
   ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
   ssh_client.connect(hostname=ssh_address,username=ssh_username,password=ssh_password)
   
   # Grab current /etc/hosts file
   with SCPClient(ssh_client.get_transport()) as scp:
-    scp.get("/etc/hosts", "old_hosts")
+    scp.get(filepath, oldlocalpath)
   # End with
 
   # Parse old_hosts file
   old_hosts = []
-  with open("old_hosts", "r") as infile:
+  with open(oldlocalpath, "r") as infile:
     for line in infile:
       old_hosts.append(line.split())
     # End for
   # End with
 
   # Generate new hosts file
-  new_hosts = copy.deepcopy(old_hosts)
-  for ip, host in hosts:
-    exists = False
-    for _ip, _host in old_hosts:
-      if host == _host:
-        exists = True
-        break
-      # End if
-    # End for
-
-    if not exists:
-      new_hosts.append((ip, host))
+  new_hosts = []
+  for host, ip in old_hosts:
+    if ip == "127.0.0.1":
+      new_hosts.append((host, ip))
     # End if
+  # End for
+  for host, ip in hosts:
+    new_hosts.append((host, ip))
   # End for
 
   # Create new host file locally
@@ -94,13 +91,11 @@ def sftp_hosts(hosts, ssh_username, ssh_password, ssh_address):
     new_host_text += f"{host} {ip}\n"
   # End for
 
-  with open("new_hosts", "w") as outfile:
+  with open(newlocalpath, "w") as outfile:
     outfile.write(new_host_text)
   # End with
 
-  # Push new /etc/hosts file
-  filepath = "/etc/hosts"
-  localpath = "new_hosts"
+  # Push new /etc/hosts file"
   with SCPClient(ssh_client.get_transport()) as scp:
     scp.put(localpath,filepath)
   # End with
@@ -109,10 +104,9 @@ def sftp_hosts(hosts, ssh_username, ssh_password, ssh_address):
   ssh_client.exec_command("""killall -HUP dnsmasq""")
 
   # Button things up
-  os.remove("old_hosts")
-  os.remove("new_hosts")
+  os.remove(oldlocalpath)
+  os.remove(newlocalpath)
 # End def
-
 
 def main():
   # Parse arguments
