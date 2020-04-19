@@ -9,7 +9,7 @@ This script communicates with the UniFi API to grab a list of all hosts which ha
 ## How to Use This Script
 
 ### Install Requirements
-This script is based on Python 3 and requires external dependencies, which can be installed by running `pip3 install -r requirements.txt`. 
+This script is designed to be ran on a host within your network (not the UDM Pro). It is written in Python 3 and requires external dependencies, which can be installed by running `pip3 install -r requirements.txt`. I recommend setting this command up to run as a cron job to ensure newly created entreis are added to `dnsmasq` regularly.
 
 ### Command Line Arguments
 - `-b`: This is the URL you use to log into your local UniFi UI
