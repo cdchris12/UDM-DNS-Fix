@@ -69,26 +69,33 @@ def sftp_hosts(hosts, ssh_username, ssh_password, ssh_address):
   old_hosts = []
   with open(oldlocalpath, "r") as infile:
     for line in infile:
-      old_hosts.append(line.split())
+
+      contents = re.split('\s+', line, 2)
+
+      if len(contents) == 2:
+        contents.append(None)
+      # End if
+
+      old_hosts.append((contents[0], contents[1], contents[2]))
     # End for
   # End with
 
   # Generate new hosts file
   new_hosts = []
-  for host, ip in old_hosts:
-    if ip == "127.0.0.1":
-      new_hosts.append((host, ip))
+  for ip, host, comment in old_hosts:
+    if re.match("127.\d+.\d+.\d+", ip):
+      new_hosts.append((ip, host, comment))
     # End if
   # End for
-  for host, ip in hosts:
-    new_hosts.append((host, ip))
+  for ip, host in hosts:
+    new_hosts.append((ip, host, None))
   # End for
 
   # Create new host file locally
-  new_hosts = sorted(new_hosts, key=lambda i: i[1])
+  new_hosts = sorted(new_hosts, key=lambda i: i[0])
   new_host_text = ""
-  for host, ip in new_hosts:
-    new_host_text += f"{host} {ip}\n"
+  for ip, host, comment in new_hosts:
+    new_host_text += f"{ip} {host} {comment if comment else ''}\n"
   # End for
 
   with open(newlocalpath, "w") as outfile:
@@ -97,7 +104,7 @@ def sftp_hosts(hosts, ssh_username, ssh_password, ssh_address):
 
   # Push new /etc/hosts file"
   with SCPClient(ssh_client.get_transport()) as scp:
-    scp.put(localpath,filepath)
+    scp.put(newlocalpath,filepath)
   # End with
 
   # Reload dnsmasq on the UDM Pro
