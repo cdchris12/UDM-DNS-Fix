@@ -28,92 +28,76 @@ def get_active_clients(session: requests.Session, baseurl: str, site: str):
   return r.json()['data']
 # End def
 
-def get_clients(baseurl: str, username: str, password: str, site: str, fixed_only: bool):
+def get_configured_networks(session: requests.Session, baseurl: str, site: str):
+  # Get configured networks
+  r = session.get(f'{baseurl}/proxy/network/api/s/{site}/rest/networkconf', verify=False)
+  r.raise_for_status()
+  return r.json()['data']
+
+def build_fqdn(client: dict, networks: dict):
+  if client['network_id'] in networks:
+    return f"{client['name']}.{networks[client['network_id']]}"
+
+  return None
+
+def get_clients(baseurl: str, username: str, password: str, site: str, fixed_only: bool, full_domain: bool):  
   s = requests.Session()
   # Log in to controller
   r = s.post(f'{baseurl}/api/auth/login', json={'username': username, 'password': password}, verify=False)
   r.raise_for_status()
-  
+
+  networks = {}
+  if full_domain is True:
+    for n in get_configured_networks(s, baseurl, site):
+      if 'domain_name' in n:
+        networks[n['_id']] = n['domain_name']
+
   clients = {}
   # Add clients with alias and reserved IP
   for c in get_configured_clients(s, baseurl, site):
     if 'name' in c and 'fixed_ip' in c:
-      clients[c['mac']] = {'name': c['name'], 'ip': c['fixed_ip']}
+      fqdn = build_fqdn(c, networks)
+      clients[c['mac']] = {'name': c['name'], 'fqdn': fqdn, 'ip': c['fixed_ip']}
   if fixed_only is False:
     # Add active clients with alias
     # Active client IP overrides the reserved one (the actual IP is what matters most)
     for c in get_active_clients(s, baseurl, site):
       if 'name' in c and 'ip' in c:
-        clients[c['mac']] = {'name': c['name'], 'ip': c['ip']}
+        fqdn = build_fqdn(c, networks)
+        clients[c['mac']] = {'name': final_name, 'fqdn': fqdn, 'ip': c['ip']}
   
   # Return a list of clients filtered on dns-friendly names and sorted by IP
   friendly_clients = [c for c in clients.values() if re.search('^[a-zA-Z0-9-]+$', c['name'])] 
   return sorted(friendly_clients, key=lambda i: i['name'])
 # End def
 
-def sftp_hosts(hosts, ssh_username, ssh_password, ssh_address):
-  filepath = "/etc/hosts"
-  oldlocalpath = "old_hosts"
-  newlocalpath = "new_hosts"
-  
+def scp_dnsmasq(hosts, ssh_username, ssh_password, ssh_address):
+  filepath = '/run/dnsmasq.conf.d/dns-alias.conf'
+  localpath = 'dns-alias.conf'
+
+  dns_alias_text = ""
+  for ip, name, fqdn in hosts:
+    if fqdn is not None:
+      dns_alias_text += f'host-record={fqdn},{name},{ip}\n'
+    else:
+      dns_alias_text += f'host-record={name},{ip}\n'
+
+  with open(localpath, 'w') as outfile:
+    outfile.write(dns_alias_text)
+
   ssh_client = paramiko.SSHClient()
   ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
   ssh_client.connect(hostname=ssh_address,username=ssh_username,password=ssh_password)
-  
-  # Grab current /etc/hosts file
+
+  # Push dns-alias.conf file
   with SCPClient(ssh_client.get_transport()) as scp:
-    scp.get(filepath, oldlocalpath)
-  # End with
+    scp.put(localpath, filepath)
 
-  # Parse old_hosts file
-  old_hosts = []
-  with open(oldlocalpath, "r") as infile:
-    for line in infile:
+  # Restart dnsmasq on the UDM Pro
+  ssh_client.exec_command("""killall dnsmasq""")
 
-      contents = re.split('\s+', line, 2)
-
-      if len(contents) == 2:
-        contents.append(None)
-      # End if
-
-      old_hosts.append((contents[0], contents[1], contents[2]))
-    # End for
-  # End with
-
-  # Generate new hosts file
-  new_hosts = []
-  for ip, host, comment in old_hosts:
-    if re.match("127.\d+.\d+.\d+", ip):
-      new_hosts.append((ip, host, comment))
-    # End if
-  # End for
-  for ip, host in hosts:
-    new_hosts.append((ip, host, None))
-  # End for
-
-  # Create new host file locally
-  new_hosts = sorted(new_hosts, key=lambda i: i[0])
-  new_host_text = ""
-  for ip, host, comment in new_hosts:
-    new_host_text += f"{ip} {host} {comment if comment else ''}\n"
-  # End for
-
-  with open(newlocalpath, "w") as outfile:
-    outfile.write(new_host_text)
-  # End with
-
-  # Push new /etc/hosts file"
-  with SCPClient(ssh_client.get_transport()) as scp:
-    scp.put(newlocalpath,filepath)
-  # End with
-
-  # Reload dnsmasq on the UDM Pro
-  ssh_client.exec_command("""killall -HUP dnsmasq""")
-
-  # Button things up
-  os.remove(oldlocalpath)
-  os.remove(newlocalpath)
-# End def
+  # Clean up local file
+  os.remove(localpath)
 
 def main():
   # Parse arguments
@@ -126,21 +110,22 @@ def main():
   parser.add_argument('-sp', '--ssh_password', type=str, default="ubnt", help='Your UDM\'s SSH password. Defaults to: "ubnt"')
   parser.add_argument('-sa', '--ssh_address', type=str, default="192.168.1.1", help='Your UDM\'s SSH address. Defaults to: "192.168.1.1"')
   parser.add_argument('-f', "--fixed_only", action='store_true', help='Only add entries with a fixed DNS name configured.')
+  parser.add_argument('-fd', "--full_domain", action='store_true', help='Add entries with a FQDN based on the Domain Name assigned to the network.')
   args = parser.parse_args()
 
   # Get list of hosts and IPs
   try:
     hosts = []
-    for c in get_clients(args.baseurl, args.username, args.password, args.site, args.fixed_only):
-      hosts.append((c['ip'], c['name']))
+    for c in get_clients(args.baseurl, args.username, args.password, args.site, args.fixed_only, args.full_domain):
+      hosts.append((c['ip'], c['name'], c['fqdn']))
     # End for
   except requests.exceptions.ConnectionError:
     print(f'Could not connect to unifi controller at {args.baseurl}', file=sys.stderr)
     exit(1)
   # End try/except block
 
-  # SFTP list onto target UDM Pro
-  sftp_hosts(hosts, args.ssh_username, args.ssh_password, args.ssh_address)
+  # SCP list onto target UDM Pro
+  scp_dnsmasq(hosts, args.ssh_username, args.ssh_password, args.ssh_address)
 # End def
 
 if __name__ == '__main__':
