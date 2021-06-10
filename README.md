@@ -4,7 +4,7 @@ A simple script to provide basic DHCP hostname resolution in the latest UniFi Dr
 
 ## How it works
 
-This script communicates with the UniFi API to grab a list of all hosts which have an alias set for them. It then grabs the current `/etc/hosts` file from the UDM Pro (not the UniFi controller; there's a difference), updates it as required, then reloads the `dnsmasq` service. This provides a crude, but effective method of managing hostname based address resolution until UniFi gets around to implementing a proper DNS solution on the UDM Pro.
+This script communicates with the UniFi API to grab a list of all hosts which have an alias set for them. It then builds a custom `dns-alias.conf` file, copies it to the UDM Pro (not the UniFi controller; there's a difference), then restarts the `dnsmasq` service. This provides a crude, but effective method of managing hostname based address resolution until UniFi gets around to implementing a proper DNS solution on the UDM Pro. Recent UniFi sw updates have forced the use of FQDN, so setting a Domain Name for each Network is recommended -- otherwise, the script will default to using `.home.arpa`, per [IETF RFC8375](https://datatracker.ietf.org/doc/html/rfc8375).  Unqualified hostnames are inserted in the event that UniFi rolls back this requirement.
 
 ## How to Use This Script
 
