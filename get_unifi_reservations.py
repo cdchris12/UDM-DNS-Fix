@@ -38,19 +38,19 @@ def build_fqdn(client: dict, networks: dict):
   if client['network_id'] in networks:
     return f"{client['name']}.{networks[client['network_id']]}"
 
-  return None
+  # default to .home.arpa, per IETF RFC8375
+  return f"{client['name']}.home.arpa"
 
-def get_clients(baseurl: str, username: str, password: str, site: str, fixed_only: bool, full_domain: bool):  
+def get_clients(baseurl: str, username: str, password: str, site: str, fixed_only: bool):  
   s = requests.Session()
   # Log in to controller
   r = s.post(f'{baseurl}/api/auth/login', json={'username': username, 'password': password}, verify=False)
   r.raise_for_status()
 
   networks = {}
-  if full_domain is True:
-    for n in get_configured_networks(s, baseurl, site):
-      if 'domain_name' in n:
-        networks[n['_id']] = n['domain_name']
+  for n in get_configured_networks(s, baseurl, site):
+    if 'domain_name' in n:
+      networks[n['_id']] = n['domain_name']
 
   clients = {}
   # Add clients with alias and reserved IP
@@ -64,7 +64,7 @@ def get_clients(baseurl: str, username: str, password: str, site: str, fixed_onl
     for c in get_active_clients(s, baseurl, site):
       if 'name' in c and 'ip' in c:
         fqdn = build_fqdn(c, networks)
-        clients[c['mac']] = {'name': final_name, 'fqdn': fqdn, 'ip': c['ip']}
+        clients[c['mac']] = {'name': c['name'], 'fqdn': fqdn, 'ip': c['ip']}
   
   # Return a list of clients filtered on dns-friendly names and sorted by IP
   friendly_clients = [c for c in clients.values() if re.search('^[a-zA-Z0-9-]+$', c['name'])] 
@@ -77,10 +77,7 @@ def scp_dnsmasq(hosts, ssh_username, ssh_password, ssh_address):
 
   dns_alias_text = ""
   for ip, name, fqdn in hosts:
-    if fqdn is not None:
-      dns_alias_text += f'host-record={fqdn},{name},{ip}\n'
-    else:
-      dns_alias_text += f'host-record={name},{ip}\n'
+    dns_alias_text += f'host-record={fqdn},{name},{ip}\n'
 
   with open(localpath, 'w') as outfile:
     outfile.write(dns_alias_text)
@@ -110,13 +107,12 @@ def main():
   parser.add_argument('-sp', '--ssh_password', type=str, default="ubnt", help='Your UDM\'s SSH password. Defaults to: "ubnt"')
   parser.add_argument('-sa', '--ssh_address', type=str, default="192.168.1.1", help='Your UDM\'s SSH address. Defaults to: "192.168.1.1"')
   parser.add_argument('-f', "--fixed_only", action='store_true', help='Only add entries with a fixed DNS name configured.')
-  parser.add_argument('-fd', "--full_domain", action='store_true', help='Add entries with a FQDN based on the Domain Name assigned to the network.')
   args = parser.parse_args()
 
   # Get list of hosts and IPs
   try:
     hosts = []
-    for c in get_clients(args.baseurl, args.username, args.password, args.site, args.fixed_only, args.full_domain):
+    for c in get_clients(args.baseurl, args.username, args.password, args.site, args.fixed_only):
       hosts.append((c['ip'], c['name'], c['fqdn']))
     # End for
   except requests.exceptions.ConnectionError:
