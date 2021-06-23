@@ -41,12 +41,15 @@ def build_fqdn(client: dict, networks: dict):
   # default to .home.arpa, per IETF RFC8375
   return f"{client['name']}.home.arpa"
 
-def get_clients(baseurl: str, username: str, password: str, site: str, fixed_only: bool):  
+def get_clients(baseurl: str, username: str, password: str, site: str, fixed_only: bool, verbose: int):
+  if verbose>2: print('Creating a session...')
   s = requests.Session()
   # Log in to controller
+  if verbose>2: print('Logging into the controller...')
   r = s.post(f'{baseurl}/api/auth/login', json={'username': username, 'password': password}, verify=False)
   r.raise_for_status()
-
+  if verbose>2: print('Login successful!')
+  
   networks = {}
   for n in get_configured_networks(s, baseurl, site):
     if 'domain_name' in n:
@@ -54,20 +57,26 @@ def get_clients(baseurl: str, username: str, password: str, site: str, fixed_onl
 
   clients = {}
   # Add clients with alias and reserved IP
+  if verbose>2: print('Getting a list of clients and IPs...')
   for c in get_configured_clients(s, baseurl, site):
     if 'name' in c and 'fixed_ip' in c:
       fqdn = build_fqdn(c, networks)
       clients[c['mac']] = {'name': c['name'], 'fqdn': fqdn, 'ip': c['fixed_ip']}
-  if fixed_only is False:
+    # End if
+  if not fixed_only:
     # Add active clients with alias
     # Active client IP overrides the reserved one (the actual IP is what matters most)
     for c in get_active_clients(s, baseurl, site):
       if 'name' in c and 'ip' in c:
         fqdn = build_fqdn(c, networks)
         clients[c['mac']] = {'name': c['name'], 'fqdn': fqdn, 'ip': c['ip']}
+      # End if
+    # End for
+  # End if
   
   # Return a list of clients filtered on dns-friendly names and sorted by IP
   friendly_clients = [c for c in clients.values() if re.search('^[a-zA-Z0-9-]+$', c['name'])] 
+  if verbose>2: print('Client list obtained successfully!')
   return sorted(friendly_clients, key=lambda i: i['name'])
 # End def
 
@@ -106,22 +115,35 @@ def main():
   parser.add_argument('-su', '--ssh_username', type=str, default="root", help='Your UDM\'s SSH username. Defaults to: "root"')
   parser.add_argument('-sp', '--ssh_password', type=str, default="ubnt", help='Your UDM\'s SSH password. Defaults to: "ubnt"')
   parser.add_argument('-sa', '--ssh_address', type=str, default="192.168.1.1", help='Your UDM\'s SSH address. Defaults to: "192.168.1.1"')
-  parser.add_argument('-f', "--fixed_only", action='store_true', help='Only add entries with a fixed DNS name configured.')
+  parser.add_argument('-f', '--fixed_only', action='store_true', help='Only add entries with a fixed DNS name configured.')
+  parser.add_argument('-v', '--verbose', action='count', default=0, help='Enable verbose output. May be specified multiple times for increased verbosity.')
   args = parser.parse_args()
 
   # Get list of hosts and IPs
   try:
+    if args.verbose: print('Getting host information...')
     hosts = []
-    for c in get_clients(args.baseurl, args.username, args.password, args.site, args.fixed_only):
+    for c in get_clients(args.baseurl, args.username, args.password, args.site, args.fixed_only, args.verbose):
       hosts.append((c['ip'], c['name'], c['fqdn']))
     # End for
   except requests.exceptions.ConnectionError:
     print(f'Could not connect to unifi controller at {args.baseurl}', file=sys.stderr)
     exit(1)
-  # End try/except block
+  else:
+    if args.verbose:
+      if hosts:
+        print('Found the following hosts:')
+        for host in hosts:
+          print('\n\t IP: %s\tName: %s' % (host[0], host[1]))
+        # End for
+      else:
+        print('No hosts found!')
+      # End else/if block
+    # End if
+  # End try/except/else block
 
   # SCP list onto target UDM Pro
-  scp_dnsmasq(hosts, args.ssh_username, args.ssh_password, args.ssh_address)
+  scp_dnsmasq(hosts, args.ssh_username, args.ssh_password, args.ssh_address, args.verbose)
 # End def
 
 if __name__ == '__main__':
