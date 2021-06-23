@@ -54,6 +54,8 @@ def get_clients(baseurl: str, username: str, password: str, site: str, fixed_onl
   for n in get_configured_networks(s, baseurl, site):
     if 'domain_name' in n:
       networks[n['_id']] = n['domain_name']
+    # End if
+  # End for
 
   clients = {}
   # Add clients with alias and reserved IP
@@ -63,6 +65,8 @@ def get_clients(baseurl: str, username: str, password: str, site: str, fixed_onl
       fqdn = build_fqdn(c, networks)
       clients[c['mac']] = {'name': c['name'], 'fqdn': fqdn, 'ip': c['fixed_ip']}
     # End if
+  # End for
+
   if not fixed_only:
     # Add active clients with alias
     # Active client IP overrides the reserved one (the actual IP is what matters most)
@@ -80,7 +84,7 @@ def get_clients(baseurl: str, username: str, password: str, site: str, fixed_onl
   return sorted(friendly_clients, key=lambda i: i['name'])
 # End def
 
-def scp_dnsmasq(hosts, ssh_username, ssh_password, ssh_address):
+def scp_dnsmasq(hosts: list, ssh_username: str, ssh_password: str, ssh_address: str, verbose: int):
   filepath = '/run/dnsmasq.conf.d/dns-alias.conf'
   localpath = 'dns-alias.conf'
 
@@ -90,18 +94,23 @@ def scp_dnsmasq(hosts, ssh_username, ssh_password, ssh_address):
 
   with open(localpath, 'w') as outfile:
     outfile.write(dns_alias_text)
-
+  
+  if verbose>2: print('Creating an SSH session...')
   ssh_client = paramiko.SSHClient()
   ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
   ssh_client.connect(hostname=ssh_address,username=ssh_username,password=ssh_password)
+  if verbose>2: print('SSH Session created successfully!')
 
   # Push dns-alias.conf file
+  if verbose>2: print('Pushing new dns-alias.conf file...')
   with SCPClient(ssh_client.get_transport()) as scp:
     scp.put(localpath, filepath)
 
   # Restart dnsmasq on the UDM Pro
+  if verbose>2: print('Restarting dnsmasq service...')
   ssh_client.exec_command("""killall dnsmasq""")
 
+  if verbose>2: print('Cleaning up local files...')
   # Clean up local file
   os.remove(localpath)
 
