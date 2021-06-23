@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
+# Builtin modules
 import os
 import re
 import sys
 from argparse import ArgumentParser
-import io
-import copy
 
+# External modules
 import requests
 import paramiko
 from scp import SCPClient
@@ -33,10 +33,12 @@ def get_configured_networks(session: requests.Session, baseurl: str, site: str):
   r = session.get(f'{baseurl}/proxy/network/api/s/{site}/rest/networkconf', verify=False)
   r.raise_for_status()
   return r.json()['data']
+# End def
 
 def build_fqdn(client: dict, networks: dict):
   if client['network_id'] in networks:
     return f"{client['name']}.{networks[client['network_id']]}"
+  # End if
 
   # default to .home.arpa, per IETF RFC8375
   return f"{client['name']}.home.arpa"
@@ -91,9 +93,11 @@ def scp_dnsmasq(hosts: list, ssh_username: str, ssh_password: str, ssh_address: 
   dns_alias_text = ""
   for ip, name, fqdn in hosts:
     dns_alias_text += f'host-record={fqdn},{name},{ip}\n'
+  # End for
 
   with open(localpath, 'w') as outfile:
     outfile.write(dns_alias_text)
+  # End with
   
   if verbose>2: print('Creating an SSH session...')
   ssh_client = paramiko.SSHClient()
@@ -105,6 +109,7 @@ def scp_dnsmasq(hosts: list, ssh_username: str, ssh_password: str, ssh_address: 
   if verbose>2: print('Pushing new dns-alias.conf file...')
   with SCPClient(ssh_client.get_transport()) as scp:
     scp.put(localpath, filepath)
+  # End with
 
   # Restart dnsmasq on the UDM Pro
   if verbose>2: print('Restarting dnsmasq service...')
@@ -113,6 +118,7 @@ def scp_dnsmasq(hosts: list, ssh_username: str, ssh_password: str, ssh_address: 
   if verbose>2: print('Cleaning up local files...')
   # Clean up local file
   os.remove(localpath)
+# End def
 
 def main():
   # Parse arguments
