@@ -19,10 +19,11 @@ This script is designed to be ran on a host within your network (not the UDM Pro
 - `-sp`: This is the password you use to SSH into your UDM Pro directly
 - `-sa`: This is the address you use to SSH into your UDM Pro directly
 - `-f`: This is a flag which tells the script to only add entries which include a fixed IP address to the `/etc/hosts` file
+- `-v`: This is a flag which enables verbose output from the script as it runs. Can be specified multiple times for additional levels of verbosity
 
 ### Example Command
 ```
-./get_unifi_reservations.py -b https://192.168.1.1:443 -p <pass> -u <user> -su root -sp <ssh_password> -sa 192.168.1.1 -f
+./get_unifi_reservations.py -b https://192.168.1.1:443 -p <pass> -u <user> -su root -sp <ssh_password> -sa 192.168.1.1 -f -vvv
 ```
 
 More information can be found by running `./get_unifi_reservations.py -h`
