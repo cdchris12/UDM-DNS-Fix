@@ -15,15 +15,26 @@ This script is designed to be ran on a host within your network (not the UDM Pro
 - `-b`: This is the URL you use to log into your local UniFi UI
 - `-p`: This is the password you use to log into your local UniFi UI
 - `-u`: This is the username you use to log into your local UniFi UI
+- `-N`: Use ~/.netrc entry for api host, username, and password (example `https://unifi.lan:443`)
 - `-su`: This is the username you use to SSH into your UDM Pro directly
 - `-sp`: This is the password you use to SSH into your UDM Pro directly
 - `-sa`: This is the address you use to SSH into your UDM Pro directly
+- `-S`: Use ~/.netrc entry for ssh host, username, and password (example `unifi`)
 - `-f`: This is a flag which tells the script to only add entries which include a fixed IP address to the `/etc/hosts` file
 - `-v`: This is a flag which enables verbose output from the script as it runs. Can be specified multiple times for additional levels of verbosity
 
 ### Example Command
 ```
 ./get_unifi_reservations.py -b https://192.168.1.1:443 -p <pass> -u <user> -su root -sp <ssh_password> -sa 192.168.1.1 -f -vvv
+```
+
+Using `~/.netrc` entries:
+```
+$ cat ~/.netrc
+machine unifi login root account root password ROOTPASSWORD
+machine https://unifi.lan:443 login USERNAME account USERNAME password USERPASSWORD
+
+$ ./get_unifi_reservations.py -N https://unifi.lan:443 -S unifi --verbose
 ```
 
 More information can be found by running `./get_unifi_reservations.py -h`
