@@ -1,10 +1,13 @@
 #!/bin/bash
 
-python3 -m venv venv --system-site-packages
-source venv/bin/activate
-pip3 install -q -r requirements.txt
+script_dir="$( dirname -- "$BASH_SOURCE"; )";
+venv_dir="$(mktemp -d)"
 
-python3 ./update-udmpro-dns.py -N https://unifi.lan:443 -S unifi --verbose
+python3 -m venv ${venv_dir} --system-site-packages
+source ${venv_dir}/bin/activate
+pip3 install -q -r ${script_dir}/requirements.txt
+
+python3 ${script_dir}/update-udmpro-dns.py -N https://unifi.lan:443 -S unifi --verbose
 
 deactivate
-rm -rf ./venv
+rm -rf ${venv_dir}
