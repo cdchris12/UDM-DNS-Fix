@@ -118,11 +118,13 @@ def merge_dnsmasq_conf(hosts: list, custom_path:str, localpath: str, verbose: in
     # End for
 
     # local custom options
-    with open(custom_path, 'r') as localfile:
-      for line in localfile:
-        outfile.write(line)
-      # End for
-    # End with
+    if os.stat(custom_path).st_size > 0:
+      if verbose>2: print('Adding custom options to the file...')
+      with open(custom_path, 'r') as localfile:
+        for line in localfile:
+          outfile.write(line)
+        # End for
+      # End with
   # End with
 # End def
 
